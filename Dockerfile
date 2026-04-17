@@ -12,7 +12,9 @@ RUN apt-get update && \
       # Localization & ROS prerequisites
       locales curl gnupg lsb-release git \
       # Python & build tools
-      python3-pip build-essential software-properties-common \
+      python3-pip python3-numpy python3-opencv python3-scipy \
+      python3-matplotlib python3-pil python3-yaml python3-psutil \
+      python3-requests python3-tqdm build-essential software-properties-common \
       # GStreamer core + plugins + tools
       python3-gi gir1.2-gst-plugins-base-1.0 gir1.2-gstreamer-1.0 \
       gstreamer1.0-tools gstreamer1.0-plugins-base \
@@ -31,8 +33,12 @@ RUN apt-get update && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
       ros-jazzy-desktop python3-colcon-common-extensions && \
-    pip3 install --upgrade --break-system-packages \
-      colcon-common-extensions ultralytics opencv-python numpy && \
+    # Keep ROS/OpenCV/NumPy apt-managed; pip only supplies ML packages missing from apt.
+    pip3 install --break-system-packages --no-cache-dir \
+      "torch==2.11.0" "torchvision==0.26.0" \
+      "polars==1.39.3" "ultralytics-thop==2.0.18" && \
+    pip3 install --break-system-packages --no-cache-dir --no-deps \
+      "ultralytics==8.4.38" && \
     # Cleanup apt caches
     apt-get clean && rm -rf /var/lib/apt/lists/*
 

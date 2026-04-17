@@ -1,16 +1,16 @@
 # AI4R_RELBot
 
-**AI for Autonomous Robot** Course  
-University of Twente — Assignment 1
+**AI for Autonomous Robot** Course<br>
+University of Twente - Assignment 1
 
-This repository contains the source code and setup instructions for **Assignment 1** of the AI for Autonomous Robot course at the University of Twente. You will extend the RAM department’s hardware module (RELBot) with AI-driven capabilities, including object detection, tracking, and SLAM, all implemented using modern deep-learning techniques.
+This repository contains the Docker setup and starter ROS 2 package for Assignment 1 of the AI for Autonomous Robot course. In this assignment, you will use the RELBot hardware platform and extend the provided ROS 2 workflow with perception logic such as object detection, tracking, and SLAM.
 
-All development should occur within the provided Docker container. Preserve your code snippets and submit them as ROS 2 packages for evaluation.
+All development for this assignment should happen inside the provided Docker container. The source code is stored on the host machine and mounted into the container, so your ROS 2 packages remain available after the container stops.
 
 ---
-# Section 1. ROS2 Package: `relbot_video_interface`
+# Section 1. ROS 2 Package: `relbot_video_interface`
 
-This skeleton package captures a GStreamer video stream and publishes object position messages to the RELBot. It exposes the video capture loop and the `/object_position` topic to control the RELBot.
+The included `relbot_video_interface` package receives a GStreamer video stream and publishes object position messages on `/object_position`. The RELBot controller uses this topic to decide how the robot should move.
 
 ---
 
@@ -19,11 +19,11 @@ This skeleton package captures a GStreamer video stream and publishes object pos
 - **Ubuntu** host (tested on 20.04+)
 - **RELBot** hardware module
 
-### Preparing the Host PC with Docker container
+### Prepare the Host PC and Docker Container
 
-Before you begin, clone this repository (which includes the `Dockerfile`, the `assignment1_setup.sh` script, and example ROS2 source code) and use the provided script to build and launch your Docker environment:
+Clone this repository on the Ubuntu host machine. The repository includes the `Dockerfile`, the `assignment1_setup.sh` helper script, and the starter ROS 2 package.
 
-```
+```bash
 # 1. Clone the repo and enter it
 git clone https://github.com/UAV-Centre-ITC/AI4R_RELBot.git
 cd AI4R_RELBot
@@ -32,115 +32,92 @@ cd AI4R_RELBot
 chmod +x assignment1_setup.sh
 
 # 3. Run the script to build (first run) or attach (subsequent runs):
-./assignment1_setup.sh  # use in every shell where you want a ROS2 Docker session
+./assignment1_setup.sh  # use in every shell where you want a ROS 2 Docker session
 ```
 
 This script will:
 
-- Build the Docker image (named by the script) on first invocation.
-- Start or attach to an existing container on future runs.
-- Mount your host workspace into the container at `/ros2_ws/src` by default.
+- Build the Docker image on first use.
+- Start or attach to the `relbot_ai4r_assignment1` container on later runs.
+- Mount the host folder `./ai4r_ws/src` into the container at `/ai4r_ws/src`.
 
 The default mapping is controlled by these variables at the top of `assignment1_setup.sh`:
 
-```
+```bash
 HOST_FOLDER="${1:-$(pwd)/ai4r_ws/src}"    # host path to mount (defaults to ./ai4r_ws/src)
-CONTAINER_FOLDER="/ros2_ws/src"           # container mount point
+CONTAINER_FOLDER="/ai4r_ws/src"           # container mount point
 ```
 
-Adjust those or add extra `-v <host_dir>:<container_dir>` flags if you need additional mounts. (You have to remove and start the container again to see the effect)
+To mount a different source folder, pass it as the first argument:
 
-Inside the container, you’ll find your workspace at `/ros2_ws/src`.  All packages you create there will persist on the host.
+```bash
+./assignment1_setup.sh /path/to/your/src
+```
 
+If you change the mount configuration after a container already exists, remove and recreate the container before expecting the new mount to appear.
+
+Inside the container, the workspace is `/ai4r_ws`, and ROS 2 packages are placed under `/ai4r_ws/src`.
 
 ---
 
-## Step 1: Connect to the RELBot
+## Step 1: Connect to the RELBot
 
-1. **WLAN (default)**  
-   - The RELBot auto-connects to SSID **RAM-lab**.  
-   - Ensure your host PC is on **RAM-lab**.  
+1. **WLAN (default)**
+   - The RELBot auto-connects to SSID **RAM-lab**.
+   - Ensure your host PC is on **RAM-lab**.
 
-2. **Ethernet (alternative)**  
-   - Connect a standard Ethernet cable between your Ubuntu host and the RELBot.  
-   - In **Settings > Network > Wired**, set IPv4 Method to **"Shared to other computers"** (this shares your host’s connection via DHCP).  
-   - Check your host’s interface and assigned IP with:
-     ```
+2. **Ethernet (alternative)**
+   - Connect a standard Ethernet cable between your Ubuntu host and the RELBot.
+   - In **Settings > Network > Wired**, set IPv4 Method to **"Shared to other computers"** (this shares your host's connection via DHCP).
+   - Check your host's interface and assigned IP with:
+     ```bash
      ifconfig  # look under eth0, enp*, or similar
      ```
-   - The RELBot’s Ethernet IP appears on its LCD; alternatively, view connected devices via:
-     ```
+   - The RELBot's Ethernet IP appears on its LCD. You can also inspect connected devices with:
+     ```bash
      arp -n
      ```
 
-3. **Determine IPs**  
-   - **RELBot IP**: read from the LCD.  
-   - **Host IP**: run `ifconfig` and note the address under your active interface (`wlan0`, `eth0`, etc.).  
+3. **Determine IPs**
+   - **RELBot IP**: read it from the RELBot LCD.
+   - **Host IP**: run `ifconfig` and note the address under the active interface (`wlan0`, `eth0`, `enp*`, etc.).
 
-4. **SSH access**  
-   ```
+4. **SSH access**
+   ```bash
    ssh pi@<RELBOT_IP>
    # For GUI apps, enable X11 forwarding:
    ssh -X pi@<RELBOT_IP>
    ```
 
-> **Tip:** Open three terminals on the RELBot. VS Code’s Remote SSH extension can simplify this.
+> **Tip:** Open three terminals on the RELBot. VS Code's Remote SSH extension can simplify this.
 
 ---
 
-## Step 2: Stream External Webcam Video
+## Step 2: Stream External Webcam Video
 
-The RELBot’s external webcam is typically available at `/dev/video2`. If you encounter errors or no video, list all video devices and choose the one labeled “Webcam.”
+Run this step on the RELBot. List the available video devices and use an even-numbered device: `/dev/video0` for the RELBot camera or `/dev/video2` for the external webcam.
 
-1. **List video devices**  
-   ```
-   v4l2-ctl --list-devices
-   ```
-   _Example output (Webcam section only):_
-   ```
-   Webcam: Webcam (usb-0000:01:00.0-1.4):
-       /dev/video2
-       /dev/video3
-       /dev/media1
-   ```
-
-   Or if RPI complains about package is missing try: 
-   ```
+1. **List video devices**
+   ```bash
    ls /dev/video*
    ```
-   Example output
-
-   ```
+   Example output:
+   ```text
    /dev/video0  /dev/video1  /dev/video2  /dev/video3
    ```
-   Here, use `/dev/video2` for MJPEG streaming.
+   Use `/dev/video0` for the RELBot camera or `/dev/video2` for the external webcam. If your RELBot shows a different even-numbered device, use that device in the GStreamer pipeline.
 
-2. **Determine your host IP**  
-   ```
+2. **Determine your host IP**
+   Run this on the Ubuntu host machine that will receive the stream:
+   ```bash
    ifconfig  # look under wlan0 or eth0
    ```
 
-3. **Start the GStreamer pipeline** _(replace `<HOST_IP>` with your host IP from the Ubuntu OS)_  
-   ```
-   gst-launch-1.0 -v \
-   v4l2src device=/dev/video2 ! \
-   image/jpeg,width=640,height=480,framerate=30/1 ! \
-   jpegdec ! videoconvert ! \
-   x264enc tune=zerolatency bitrate=800 speed-preset=ultrafast ! \
-   rtph264pay config-interval=1 pt=96 ! \
-   udpsink host=<HOST_IP> port=5000
-   ```
-   - **v4l2src**: captures MJPEG frames.  
-   - **jpegdec + videoconvert**: decode to raw video.  
-   - **x264enc**: encode to H.264 with low latency.  
-   - **rtph264pay**: packetize for RTP.  
-   - **udpsink**: stream to your host.
+3. **Start the GStreamer pipeline**
 
-### NOTE
+   For best performance with the RELBot controller (which assumes a 320 px image width), update your video capture pipeline to use a 320x240 resolution (i.e. width=320, height=240). Replace `<HOST_IP>` with the IP address of the Ubuntu host machine.
 
-**For best performance with the RELBot controller (which assumes a 320 px image width), update your video capture pipeline to use a 320×240 resolution (i.e. width=320, height=240).**
-   
- ```
+   ```bash
    gst-launch-1.0 -v \
    v4l2src device=/dev/video2 ! \
    image/jpeg,width=320,height=240,framerate=30/1 ! \
@@ -150,55 +127,72 @@ The RELBot’s external webcam is typically available at `/dev/video2`. If you e
    udpsink host=<HOST_IP> port=5000
    ```
 
+   Pipeline explanation:
+   - `v4l2src device=/dev/video2` captures frames from the external webcam.
+   - `image/jpeg,width=320,height=240,framerate=30/1` requests an MJPEG stream at 320x240 and 30 FPS.
+   - `jpegdec ! videoconvert` decodes and converts the camera frames.
+   - `x264enc tune=zerolatency bitrate=800 speed-preset=ultrafast` encodes low-latency H.264 video.
+   - `rtph264pay config-interval=1 pt=96` packetizes the H.264 stream as RTP.
+   - `udpsink host=<HOST_IP> port=5000` sends the stream to the Ubuntu host on UDP port 5000.
+
 ---
 
-## Step 3: Launch Controller Nodes on the RELBot
+## Step 3: Launch Controller Nodes on the RELBot
 
-Prebuilt ROS 2 packages for the FPGA and Raspberry Pi controllers are provided with your RELBot hardware. Report hardware issues for a replacement; software bugs will be patched across all robots.
+Prebuilt ROS 2 packages for the FPGA and Raspberry Pi controllers are provided with your RELBot hardware. Report hardware issues for a replacement; software bugs will be patched across all robots.
 
-Please open two terminals on the RELBot and then, 
+Keep the webcam streaming terminal from Step 2 running. Then open two additional terminals on the RELBot.
 
-**Terminal 1:**
-```
+**Terminal 1:**
+```bash
 source ~/ai4r_ws/install/setup.bash
 cd ~/ai4r_ws/
 sudo ./build/demo/demo   # low-level motor and FPGA interface
 ```
 
-**Terminal 2:**
-```
+**Terminal 2:**
+```bash
 source ~/ai4r_ws/install/setup.bash
 ros2 launch sequence_controller sequence_controller.launch.py   # high-level state machine
 ```
 
 ---
 
-## Step 4: Configure Your Docker Container
+## Step 4: Configure Your Docker Container
 
-Set up your ROS 2 workspace to communicate with the RELBot via a unique domain ID.
+Set up your ROS 2 workspace to communicate with the RELBot via a unique domain ID.
 
-1. **Preview the video stream**  
+1. **Start or attach to the Docker container**
+
+   Run this from the repository root on the Ubuntu host:
+   ```bash
+   ./assignment1_setup.sh
    ```
+
+2. **Preview the video stream**
+
+   Run this inside the Docker container to verify that the UDP stream from Step 2 is arriving:
+   ```bash
    gst-launch-1.0 -v \
    udpsrc port=5000 caps="application/x-rtp,media=video,encoding-name=H264,payload=96" ! \
    rtph264depay ! avdec_h264 ! autovideosink
    ```
 
-2. **Set your ROS domain**  
-   ```
+3. **Set your ROS domain**
+   ```bash
    export ROS_DOMAIN_ID=<RELBot_ID>   # e.g., 8 for RELBot08
    ```
-   Add this line to `~/.bashrc` to make it persistent. This is a very important step to configure the communication with the ROS2 running on the RELBot.
+   Add this line to `~/.bashrc` inside the container if you want it to persist across shell sessions. The Docker container and the ROS 2 nodes on the RELBot must use the same `ROS_DOMAIN_ID`.
 
 ---
 
-###  Build and Test relbot_video_interface Package
+### Build and Test `relbot_video_interface`
 
-The `relbot_video_interface` package is already included in this repository under `/ai4r_ws/src/relbot_video_interface` and is mounted into the Docker container at `/ros2_ws/src/relbot_video_interface`.
+The `relbot_video_interface` package is included in this repository under `ai4r_ws/src/relbot_video_interface` on the host and is mounted into the Docker container at `/ai4r_ws/src/relbot_video_interface`.
 
-Once your Docker container is running and prerequisites (ROS 2, GStreamer, Step 4.2 etc.) are satisfied, build and launch the test node to verify the video stream:
+Once the Docker container is running, the video stream is visible, and `ROS_DOMAIN_ID` is set, build and launch the package:
 
-```
+```bash
 # From inside the container, at the workspace root:
 cd /ai4r_ws
 
@@ -215,118 +209,55 @@ ros2 launch relbot_video_interface video_interface.launch.py
 You should see the live camera feed streaming and placeholder `/object_position` messages being published. If no errors occur, the setup is correct and you can proceed to add or modify detection logic.
 
 
-Happy coding—and good luck with your assignment!  
+Happy coding, and good luck with your assignment!
 
 ---
 # Section 2. Important Configuration and Commands
 
 ## GPU Access from Docker Container
-First, ensure your host machine has a supported NVIDIA GPU and the proprietary NVIDIA drivers are properly installed. You can follow PhoenixNAP’s Ubuntu guide for NVIDIA drivers:
 
-[https://phoenixnap.com/kb/install-nvidia-drivers-ubuntu](https://phoenixnap.com/kb/install-nvidia-drivers-ubuntu)
+The Docker setup is intended to support GPU-accelerated deep learning. The `assignment1_setup.sh` script already starts the container with `--gpus all`, so no script edit is needed when the host is configured correctly.
 
-Verify your driver is active by running:
+1. **Verify the NVIDIA driver on the host**
 
-```
-nvidia-smi
-```
-
-Use the NVIDIA Container Toolkit to expose your host GPU inside the ROS 2 Docker container. Follow these steps:
-
-**1. Install & Configure on the Host**
-
-Follow NVIDIA’s official instructions to configure the repository and install the container toolkit:
-
-```
-# 1) Add NVIDIA’s GPG key and configure the production repository
-curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
-  && curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
-    sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
-    sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-
-# 2) Update and install the NVIDIA Container Toolkit
-sudo apt-get update
-sudo apt-get install -y nvidia-container-toolkit
-
-# 3) Restart Docker to apply the new runtime
-sudo systemctl restart docker
-```
-
-Verify the `nvidia` runtime is available:
-
-```
-docker info | grep -i "runtimes"
-# Expect to see 'nvidia' listed
-```
-
-**2. Update `assignment1_setup.sh`**
-
-To enable GPU access, add the `--gpus all` option to your `docker run` invocation in `assignment1_setup.sh`. For example:
-
-```
-#!/usr/bin/env bash
-# ...
-
-docker run -it \
-  --name "${CONTAINER_NAME}" \
-  --net=host \
-  --gpus all\ # <-- Just add this switch
-  -e DISPLAY="$DISPLAY" \
-  -v /tmp/.X11-unix:/tmp/.X11-unix \
-  -v "${HOST_FOLDER}":"${CONTAINER_FOLDER}" \
-  -e QT_X11_NO_MITSHM=1 \
-  --privileged \
-  "${IMAGE_NAME}" bash
-```
-
-**3. Restarting the Docker Container**
-
-> **Important:** If you have unsaved or non-mounted changes inside your existing container, back them up now (for example, with `docker cp`).
-
-To apply the `--gpus all` flag (or any other changes in `assignment1_setup.sh`), stop and remove the old container and then relaunch it:
-
-1. **List all containers** (filter by your image name) and note the container name or ID for `gstream-ros2-jazzy-ubuntu24`:
-
+   Run this on the Ubuntu host, outside Docker:
+   ```bash
+   nvidia-smi
    ```
-   docker ps -a | grep gstream-ros2-jazzy-ubuntu24
-   # Example:
-   # abcd1234abcd   gstream-ros2-jazzy-ubuntu24   "bash"   2 hours ago   Exited (0) 1 hour ago   relbot_ai4r_assignment1
+   If this command fails, install or repair the NVIDIA driver before continuing.
+
+2. **Install the NVIDIA Container Toolkit on the host**
+
+   Follow NVIDIA's official installation instructions for your Ubuntu version, then restart Docker. After installation, verify that Docker sees the NVIDIA runtime:
+
+   ```bash
+   docker info | grep -i "runtimes"
    ```
 
-2. **Stop** the existing container:
+3. **Recreate the assignment container if needed**
 
-   ```
+   Docker run options are fixed when a container is created. If you installed GPU support after creating `relbot_ai4r_assignment1`, remove the old container and launch it again:
+
+   ```bash
    docker stop relbot_ai4r_assignment1
-   ```
-
-3. **Remove** the stopped container:
-
-   ```
    docker rm relbot_ai4r_assignment1
-   ```
-
-4. **Relaunch** with your updated script (no rebuild required):
-
-   ```
    ./assignment1_setup.sh
    ```
 
-> **Note:** Relaunching the container does *not* rebuild the Docker image; it simply starts a new container instance from the already-built image with GPU support enabled.
+   This removes only the container instance. Your assignment packages under `./ai4r_ws/src` remain on the host because they are mounted into the container.
 
-**3. Verify GPU Inside Container**
+4. **Verify GPU access inside the container**
 
-Once the container is running, confirm GPU visibility:
+   ```bash
+   nvidia-smi
+   ```
 
-```
-nvidia-smi
-```
-
-You should see the same GPU details as on the host. ROS 2 nodes can now leverage the GPU from within Docker.
+   You should see the same GPU information inside the container as on the host.
 
 
-## ROS2 Cheatsheet
+## ROS 2 Cheatsheet
 
-Below are common ROS 2 commands and tools for development and debugging within the Docker container:
+Below are common ROS 2 commands and tools for development and debugging within the Docker container:
 
 ```bash
 # Build and source workspace
@@ -353,7 +284,7 @@ ros2 param list /video_interface
 ros2 param get /video_interface gst_pipeline
 ros2 param set /video_interface gst_pipeline "<new_pipeline_string>"
 
-# Publish a test message once to move the RELBot (if this is not working check the ROS_DOMAIN_ID, step 4.2)
+# Publish a test message once to move the RELBot. If this does not work, check the ROS_DOMAIN_ID from Step 4.3.
 ros2 topic pub /object_position geometry_msgs/msg/Point "{x: 100.0, y: 0.0, z: 0.0}" --once
 
 # Debug with RQT tools
@@ -368,27 +299,28 @@ ros2 run tf2_tools view_frames.py
 ros2 bag record /object_position  <other_topics>    # start recording
 ros2 bag play <bagfile>               # play back recorded data and process it offline
 ```
+
 ---
 ## VS Code Development Environment
 
-For seamless development, you can use VS Code’s Remote extensions to work directly inside your Docker container and SSH into the RELBot:
+For seamless development, you can use VS Code's Remote extensions to work directly inside your Docker container and SSH into the RELBot:
 
 1. **Install Extensions**
    - **Remote Development**
 
-2. **Connect to the Docker Container**  
-   - Press <kbd>F1</kbd> → **Dev-Containers: Attach to Running Container…**  
-   - Select your `relbot_ai4r_assignment1` container.  
-   - VS Code will reopen with the container filesystem as your workspace.
+2. **Connect to the Docker Container**
+   - Press <kbd>F1</kbd>, then choose **Dev-Containers: Attach to Running Container...**
+   - Select your `relbot_ai4r_assignment1` container.
+   - VS Code will reopen with the container filesystem as your workspace.
 
-3. **SSH into the RELBot**  
-   - In the **Remote Explorer** sidebar, under **Remotes(SSH/Tunnels)**, click **Configure button** to add a host entry for `pi@<RELBOT_IP>`.  
-   - Press <kbd>F1</kbd> → **Remote-SSH: Connect to Host…** → select your RELBot entry.  
-   - VS Code opens a new window connected to the robot, letting you inspect logs or edit files over SSH.
+3. **SSH into the RELBot**
+   - In the **Remote Explorer** sidebar, under **Remotes (SSH/Tunnels)**, click **Configure** to add a host entry for `pi@<RELBOT_IP>`.
+   - Press <kbd>F1</kbd>, then choose **Remote-SSH: Connect to Host...** and select your RELBot entry.
+   - VS Code opens a new window connected to the robot, letting you inspect logs or edit files over SSH.
 
-4. **Workflow Tips**  
-   - Use split windows: one VS Code window attached to Docker (for code build & debug), another attached to RELBot (for robot-side logs & tweaks).  
-   - Ensure `~/.ssh/config` has your RELBot entry for quick access:  
+4. **Workflow Tips**
+   - Use split windows: one VS Code window attached to Docker for code, build, and debug work, and another attached to the RELBot for robot-side logs and changes.
+   - Ensure `~/.ssh/config` has your RELBot entry for quick access:
      ```text
      Host  <RELBot_IP>
          HostName <RELBot_IP>
