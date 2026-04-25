@@ -39,5 +39,6 @@ else
     -v "${HOST_FOLDER}":"${CONTAINER_FOLDER}" \
     -e QT_X11_NO_MITSHM=1 \
     --privileged \
+    
     "${IMAGE_NAME}" bash
 fi
